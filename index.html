@@ -422,9 +422,12 @@
       });
     });
 
-    // スニペット定義（タグ・説明付き）
+    // サイドバー用スニペット定義（タグ・説明付き）
     const snippetDefinitions = {
       lua: [
+        { label: "local", desc: "ローカル変数宣言", code: "local ${1:name} = ${2:value}", tag: "sys" },
+        { label: "function", desc: "関数定義", code: "function ${1:func_name}(${2:params})\n\t${3}\nend", tag: "sys" },
+        { label: "local function", desc: "ローカル関数定義", code: "local function ${1:func_name}(${2:params})\n\t${3}\nend", tag: "sys" },
         { label: "draw_rect", desc: "四角形を描画", code: "draw_rect(${1:x}, ${2:y}, ${3:width}, ${4:height}, \"${5:#00e676}\")", tag: "draw" },
         { label: "clear_canvas", desc: "画面描画をクリア", code: "clear_canvas()", tag: "draw" },
         { label: "play_sound", desc: "音を鳴らす (周波数, 秒)", code: "play_sound(${1:440}, ${2:0.2})", tag: "sound" },
@@ -437,18 +440,73 @@
         { label: "reset_bg", desc: "背景色を初期状態に戻す", code: "reset_bg()", tag: "sys" },
         { label: "print", desc: "コンソール出力", code: "print(${1:\"Hello\"})", tag: "sys" },
         { label: "wait", desc: "指定秒数待機", code: "wait(${1:0.5})", tag: "sys" },
-        { label: "for i=1,n", desc: "繰り返し処理", code: "for ${1:i} = ${2:1}, ${3:10} do\n\t${4}\nend", tag: "sys" },
+        { label: "for i=1,n", desc: "数値ループ", code: "for ${1:i} = ${2:1}, ${3:10} do\n\t${4}\nend", tag: "sys" },
+        { label: "for in pairs", desc: "テーブル巡回", code: "for ${1:k}, ${2:v} in pairs(${3:table}) do\n\t${4}\nend", tag: "sys" },
         { label: "if", desc: "条件分岐", code: "if ${1:condition} then\n\t${2}\nend", tag: "sys" }
       ],
       javascript: [
-        { label: "console.log", desc: "ログ出力", code: "console.log(${1});", tag: "sys" }
+        { label: "console.log", desc: "ログ出力", code: "console.log(${1});", tag: "sys" },
+        { label: "const", desc: "定数宣言", code: "const ${1:name} = ${2:value};", tag: "sys" },
+        { label: "function", desc: "関数定義", code: "function ${1:name}(${2}) {\n\t${3}\n}", tag: "sys" }
       ],
       python: [
-        { label: "print", desc: "コンソール出力", code: "print(${1})", tag: "sys" }
+        { label: "print", desc: "コンソール出力", code: "print(${1})", tag: "sys" },
+        { label: "def", desc: "関数定義", code: "def ${1:name}(${2}):\n\t${3}", tag: "sys" }
       ]
     };
 
-    const defaultLuaCode = `-- Apex Studio 動作デモ\nreset_bg()\nclear_canvas()\nprint("音とカラーアニメーションを開始します...")\n\nlocal notes = {261.63, 293.66, 329.63, 349.23, 392.00, 440.00}\nlocal colors = {"#ff5252", "#ff9100", "#ffea00", "#00e676", "#00b0ff", "#7c4dff"}\n\nfor i = 1, #notes do\n    local x = (i - 1) * 60 + 20\n    draw_rect(x, 40, 45, 80, colors[i])\n    play_sound(notes[i], 0.15)\n    print("音階 " .. i .. ": " .. math.floor(notes[i]) .. " Hz")\n    wait(0.25)\nend\n\nprint("完了！カラーピッカーで色を選んでコードに挿入できます。")`;
+    // Monaco エディタ用の拡張予測変換（キーワー・スニペット・組み込み API）
+    const luaAutocompleteCandidates = [
+      // Lua 予約語 / キーワード
+      { label: 'local', kind: 'Keyword', insertText: 'local ${1:name} = ${2:value}', isSnippet: true, detail: 'ローカル変数を宣言' },
+      { label: 'function', kind: 'Keyword', insertText: 'function ${1:name}(${2:params})\n\t${3}\nend', isSnippet: true, detail: '関数を定義' },
+      { label: 'local function', kind: 'Keyword', insertText: 'local function ${1:name}(${2:params})\n\t${3}\nend', isSnippet: true, detail: 'ローカル関数を定義' },
+      { label: 'if', kind: 'Keyword', insertText: 'if ${1:condition} then\n\t${2}\nend', isSnippet: true, detail: '条件分岐 (if)' },
+      { label: 'then', kind: 'Keyword', insertText: 'then', isSnippet: false, detail: 'then キーワード' },
+      { label: 'elseif', kind: 'Keyword', insertText: 'elseif ${1:condition} then\n\t${2}', isSnippet: true, detail: '条件分岐 (elseif)' },
+      { label: 'else', kind: 'Keyword', insertText: 'else\n\t${1}', isSnippet: true, detail: '条件分岐 (else)' },
+      { label: 'end', kind: 'Keyword', insertText: 'end', isSnippet: false, detail: 'ブロックを終了 (end)' },
+      { label: 'for', kind: 'Keyword', insertText: 'for ${1:i} = ${2:1}, ${3:10} do\n\t${4}\nend', isSnippet: true, detail: '数値ループ (for)' },
+      { label: 'for in pairs', kind: 'Snippet', insertText: 'for ${1:k}, ${2:v} in pairs(${3:tbl}) do\n\t${4}\nend', isSnippet: true, detail: 'テーブル巡回' },
+      { label: 'for in ipairs', kind: 'Snippet', insertText: 'for ${1:i}, ${2:v} in ipairs(${3:arr}) do\n\t${4}\nend', isSnippet: true, detail: '配列巡回' },
+      { label: 'while', kind: 'Keyword', insertText: 'while ${1:condition} do\n\t${2}\nend', isSnippet: true, detail: 'while ループ' },
+      { label: 'repeat', kind: 'Keyword', insertText: 'repeat\n\t${1}\nuntil ${2:condition}', isSnippet: true, detail: 'repeat-until ループ' },
+      { label: 'return', kind: 'Keyword', insertText: 'return ${1}', isSnippet: true, detail: '値を返す' },
+      { label: 'break', kind: 'Keyword', insertText: 'break', isSnippet: false, detail: 'ループ脱出' },
+      { label: 'nil', kind: 'Keyword', insertText: 'nil', isSnippet: false, detail: 'nil 値' },
+      { label: 'true', kind: 'Keyword', insertText: 'true', isSnippet: false, detail: '真 (true)' },
+      { label: 'false', kind: 'Keyword', insertText: 'false', isSnippet: false, detail: '偽 (false)' },
+      { label: 'and', kind: 'Keyword', insertText: 'and', isSnippet: false, detail: '論理積 (and)' },
+      { label: 'or', kind: 'Keyword', insertText: 'or', isSnippet: false, detail: '論理和 (or)' },
+      { label: 'not', kind: 'Keyword', insertText: 'not', isSnippet: false, detail: '論理否定 (not)' },
+      
+      // Apex Studio API
+      { label: 'draw_rect', kind: 'Function', insertText: 'draw_rect(${1:x}, ${2:y}, ${3:width}, ${4:height}, \"${5:#00e676}\")', isSnippet: true, detail: '指定位置に四角形を描画' },
+      { label: 'clear_canvas', kind: 'Function', insertText: 'clear_canvas()', isSnippet: false, detail: 'キャンバス描画を全消去' },
+      { label: 'play_sound', kind: 'Function', insertText: 'play_sound(${1:440}, ${2:0.2})', isSnippet: true, detail: '指定周波数の音を鳴らす' },
+      { label: 'get_mouse_x', kind: 'Function', insertText: 'get_mouse_x()', isSnippet: false, detail: 'キャンバス内マウスX座標取得' },
+      { label: 'get_mouse_y', kind: 'Function', insertText: 'get_mouse_y()', isSnippet: false, detail: 'キャンバス内マウスY座標取得' },
+      { label: 'is_mouse_down', kind: 'Function', insertText: 'is_mouse_down(${1:0})', isSnippet: true, detail: 'マウス押下判定 (0:左 1:中 2:右)' },
+      { label: 'is_key_down', kind: 'Function', insertText: 'is_key_down(\"${1:a}\")', isSnippet: true, detail: '指定キーの押下判定' },
+      { label: 'get_last_key', kind: 'Function', insertText: 'get_last_key()', isSnippet: false, detail: '最後に押されたキー名を取得' },
+      { label: 'set_bg', kind: 'Function', insertText: 'set_bg(\"${1:#1a0033}\")', isSnippet: true, detail: '画面背景色を設定' },
+      { label: 'reset_bg', kind: 'Function', insertText: 'reset_bg()', isSnippet: false, detail: '画面背景色を初期化' },
+      { label: 'print', kind: 'Function', insertText: 'print(${1:val})', isSnippet: true, detail: 'コンソールログ出力' },
+      { label: 'wait', kind: 'Function', insertText: 'wait(${1:0.5})', isSnippet: true, detail: '指定秒数スリープ' },
+
+      // 標準ライブラリ
+      { label: 'math.floor', kind: 'Function', insertText: 'math.floor(${1:x})', isSnippet: true, detail: '小数点以下切り捨て' },
+      { label: 'math.ceil', kind: 'Function', insertText: 'math.ceil(${1:x})', isSnippet: true, detail: '小数点以下切り上げ' },
+      { label: 'math.random', kind: 'Function', insertText: 'math.random(${1:min}, ${2:max})', isSnippet: true, detail: '乱数を生成' },
+      { label: 'math.abs', kind: 'Function', insertText: 'math.abs(${1:x})', isSnippet: true, detail: '絶対値を計算' },
+      { label: 'table.insert', kind: 'Function', insertText: 'table.insert(${1:tbl}, ${2:val})', isSnippet: true, detail: 'テーブルに要素を追加' },
+      { label: 'table.remove', kind: 'Function', insertText: 'table.remove(${1:tbl}, ${2:pos})', isSnippet: true, detail: 'テーブルから要素を削除' },
+      { label: 'string.sub', kind: 'Function', insertText: 'string.sub(${1:str}, ${2:i}, ${3:j})', isSnippet: true, detail: '文字列の部分切り出し' },
+      { label: 'pairs', kind: 'Function', insertText: 'pairs(${1:tbl})', isSnippet: true, detail: 'テーブルキーバリューイテレータ' },
+      { label: 'ipairs', kind: 'Function', insertText: 'ipairs(${1:tbl})', isSnippet: true, detail: '配列インデックスイテレータ' }
+    ];
+
+    const defaultLuaCode = `-- Apex Studio 動作デモ (キー・マウス入力 & 予測変換テスト)\nreset_bg()\nclear_canvas()\nprint("リアルタイム入力テストを開始します...")\n\n-- local / function などの補完候補が即座に表示されます！\nlocal color = "#00e676"\n\nfor i = 1, 6 do\n    local x = (i - 1) * 60 + 20\n    draw_rect(x, 40, 45, 80, color)\n    play_sound(261.63 + i * 30, 0.1)\n    wait(0.15)\nend\n\nprint("画面をクリックするかキーを押してみてください！")`;
 
     require.config({ paths: { vs: 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.38.0/min/vs' } });
     require(['vs/editor/editor.main'], function () {
@@ -459,23 +517,53 @@
         colors: { 'editor.background': '#090a0f00' } 
       });
 
-      // 自動補完（補完ポップアップ）
-      ['lua', 'javascript', 'python'].forEach(lang => {
-          monaco.languages.registerCompletionItemProvider(lang, {
-              provideCompletionItems: function(model, position) {
-                  const word = model.getWordUntilPosition(position);
-                  const range = { startLineNumber: position.lineNumber, endLineNumber: position.lineNumber, startColumn: word.startColumn, endColumn: word.endColumn };
-                  const suggestions = (snippetDefinitions[lang] || []).map(snippet => ({
-                      label: snippet.label,
-                      kind: monaco.languages.CompletionItemKind.Snippet,
-                      detail: snippet.desc,
-                      insertText: snippet.code,
-                      insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
-                      range: range
-                  }));
-                  return { suggestions: suggestions };
-              }
+      // 予測変換 (補完プロバイダ) の強化登録
+      monaco.languages.registerCompletionItemProvider('lua', {
+        provideCompletionItems: function(model, position) {
+          const word = model.getWordUntilPosition(position);
+          const range = { 
+            startLineNumber: position.lineNumber, 
+            endLineNumber: position.lineNumber, 
+            startColumn: word.startColumn, 
+            endColumn: word.endColumn 
+          };
+
+          const suggestions = luaAutocompleteCandidates.map(item => {
+            let kind = monaco.languages.CompletionItemKind.Keyword;
+            if (item.kind === 'Function') kind = monaco.languages.CompletionItemKind.Function;
+            if (item.kind === 'Snippet') kind = monaco.languages.CompletionItemKind.Snippet;
+
+            return {
+              label: item.label,
+              kind: kind,
+              detail: item.detail || '',
+              insertText: item.insertText,
+              insertTextRules: item.isSnippet ? monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet : undefined,
+              range: range
+            };
           });
+
+          return { suggestions: suggestions };
+        }
+      });
+
+      // 他言語用（JS / Python）
+      ['javascript', 'python'].forEach(lang => {
+        monaco.languages.registerCompletionItemProvider(lang, {
+          provideCompletionItems: function(model, position) {
+            const word = model.getWordUntilPosition(position);
+            const range = { startLineNumber: position.lineNumber, endLineNumber: position.lineNumber, startColumn: word.startColumn, endColumn: word.endColumn };
+            const suggestions = (snippetDefinitions[lang] || []).map(snippet => ({
+              label: snippet.label,
+              kind: monaco.languages.CompletionItemKind.Snippet,
+              detail: snippet.desc,
+              insertText: snippet.code,
+              insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+              range: range
+            }));
+            return { suggestions: suggestions };
+          }
+        });
       });
 
       const initialCode = localStorage.getItem('apex_autosave_tab1') || defaultLuaCode;
@@ -490,7 +578,13 @@
         minimap: { enabled: minimapEnabled }, 
         autoClosingBrackets: "always", 
         autoClosingQuotes: "always",
-        quickSuggestions: true
+        quickSuggestions: {
+          other: true,
+          comments: true,
+          strings: true
+        },
+        suggestOnTriggerCharacters: true,
+        acceptSuggestionOnEnter: "on"
       });
 
       editor.onDidChangeModelContent(() => { localStorage.setItem(`apex_autosave_tab${currentTab}`, editor.getValue()); });
@@ -510,7 +604,6 @@
     function insertColorCode() {
       const color = document.getElementById('color-picker').value;
       const selection = editor.getSelection();
-      const id = { id: 'insert-color', text: `"${color}"` };
       editor.executeEdits('', [{ range: selection, text: `"${color}"`, forceMoveMarkers: true }]);
       editor.focus();
     }
