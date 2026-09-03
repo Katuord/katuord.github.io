@@ -145,6 +145,7 @@
     .tag-draw { background: #00e67622; color: #00e676; }
     .tag-sound { background: #ffea0022; color: #ffea00; }
     .tag-sys { background: #00b0ff22; color: #00b0ff; }
+    .tag-input { background: #ff408122; color: #ff4081; }
 
     /* エディタ */
     .editor-wrapper { flex: 1; display: flex; flex-direction: column; min-width: 0; }
@@ -162,7 +163,7 @@
     /* キャンバス領域 */
     #canvas-container { background: #000; border-radius: 8px; border: 1px solid var(--border-color); padding: 8px; display: flex; flex-direction: column; align-items: center; }
     .canvas-title { font-size: 10px; color: var(--text-sub); width: 100%; margin-bottom: 4px; display: flex; justify-content: space-between; }
-    #screen-canvas { width: 100%; height: 160px; background: #050508; border-radius: 4px; display: block; }
+    #screen-canvas { width: 100%; height: 160px; background: #050508; border-radius: 4px; display: block; cursor: crosshair; }
 
     /* コンソール出力領域 */
     #console-output { 
@@ -192,7 +193,7 @@
     /* ヘルプモーダル */
     .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); backdrop-filter: blur(5px); z-index: 1000; justify-content: center; align-items: center; }
     .modal-overlay.active { display: flex; }
-    .modal-box { background: #161824; border: 1px solid var(--border-color); width: 90%; max-width: 600px; max-height: 85vh; border-radius: 12px; padding: 20px; overflow-y: auto; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+    .modal-box { background: #161824; border: 1px solid var(--border-color); width: 90%; max-width: 650px; max-height: 85vh; border-radius: 12px; padding: 20px; overflow-y: auto; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
     .modal-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 10px; margin-bottom: 15px; }
     .modal-header h3 { color: var(--accent-warning); display: flex; align-items: center; gap: 8px; }
     .close-btn { background: transparent; border: none; color: var(--text-sub); font-size: 18px; cursor: pointer; }
@@ -296,7 +297,7 @@
         <h3><i class="fa-solid fa-lightbulb"></i> 使い方と利用可能コマンド</h3>
         <button class="close-btn" onclick="toggleHelpModal(false)"><i class="fa-solid fa-xmark"></i></button>
       </div>
-      <p style="font-size:12px; color:var(--text-sub); margin-bottom:12px;">Luaモードでは画面描画やサウンド再生を行う特殊コマンドが利用できます。</p>
+      <p style="font-size:12px; color:var(--text-sub); margin-bottom:12px;">Luaモードでは画面描画・サウンド再生・入力検知機能が利用できます。</p>
       
       <table class="help-table">
         <thead>
@@ -334,6 +335,31 @@
             <td><span class="code-inline">wait(0.5)</span></td>
           </tr>
           <tr>
+            <td><span class="code-inline">get_mouse_x()</span></td>
+            <td>キャンバス内のマウスX座標を取得</td>
+            <td><span class="code-inline">local mx = get_mouse_x()</span></td>
+          </tr>
+          <tr>
+            <td><span class="code-inline">get_mouse_y()</span></td>
+            <td>キャンバス内のマウスY座標を取得</td>
+            <td><span class="code-inline">local my = get_mouse_y()</span></td>
+          </tr>
+          <tr>
+            <td><span class="code-inline">is_mouse_down(btn)</span></td>
+            <td>マウスボタン押下状態 (0:左 1:中 2:右)</td>
+            <td><span class="code-inline">if is_mouse_down(0) then ... end</span></td>
+          </tr>
+          <tr>
+            <td><span class="code-inline">is_key_down("key")</span></td>
+            <td>指定したキーが押されているか確認</td>
+            <td><span class="code-inline">if is_key_down("a") then ... end</span></td>
+          </tr>
+          <tr>
+            <td><span class="code-inline">get_last_key()</span></td>
+            <td>最後に押されたキー名を取得</td>
+            <td><span class="code-inline">print(get_last_key())</span></td>
+          </tr>
+          <tr>
             <td><span class="code-inline">print(...)</span></td>
             <td>右下のコンソール領域に文字を表示</td>
             <td><span class="code-inline">print("Hello World!")</span></td>
@@ -349,12 +375,64 @@
     let editorFontSize = 14;
     let minimapEnabled = true;
 
+    /* --- リアルタイム入力検知用の変数とリスナー --- */
+    let inputMouseX = 0;
+    let inputMouseY = 0;
+    let inputMouseButtons = {};
+    let inputKeyState = {};
+    let inputLastKey = "";
+
+    window.addEventListener('DOMContentLoaded', () => {
+      const cvs = document.getElementById('screen-canvas');
+      if (cvs) {
+        cvs.addEventListener('mousemove', (e) => {
+          const rect = cvs.getBoundingClientRect();
+          const scaleX = cvs.width / rect.width;
+          const scaleY = cvs.height / rect.height;
+          inputMouseX = Math.floor((e.clientX - rect.left) * scaleX);
+          inputMouseY = Math.floor((e.clientY - rect.top) * scaleY);
+        });
+
+        cvs.addEventListener('mousedown', (e) => {
+          inputMouseButtons[e.button] = true;
+        });
+
+        cvs.addEventListener('mouseup', (e) => {
+          inputMouseButtons[e.button] = false;
+        });
+
+        cvs.addEventListener('mouseleave', () => {
+          inputMouseButtons = {};
+        });
+
+        cvs.addEventListener('contextmenu', (e) => e.preventDefault());
+      }
+
+      window.addEventListener('keydown', (e) => {
+        inputKeyState[e.key] = true;
+        inputKeyState[e.key.toLowerCase()] = true;
+        inputKeyState[e.code] = true;
+        inputLastKey = e.key === ' ' ? 'Space' : e.key;
+      });
+
+      window.addEventListener('keyup', (e) => {
+        inputKeyState[e.key] = false;
+        inputKeyState[e.key.toLowerCase()] = false;
+        inputKeyState[e.code] = false;
+      });
+    });
+
     // スニペット定義（タグ・説明付き）
     const snippetDefinitions = {
       lua: [
         { label: "draw_rect", desc: "四角形を描画", code: "draw_rect(${1:x}, ${2:y}, ${3:width}, ${4:height}, \"${5:#00e676}\")", tag: "draw" },
         { label: "clear_canvas", desc: "画面描画をクリア", code: "clear_canvas()", tag: "draw" },
         { label: "play_sound", desc: "音を鳴らす (周波数, 秒)", code: "play_sound(${1:440}, ${2:0.2})", tag: "sound" },
+        { label: "get_mouse_x", desc: "マウスのX座標を取得", code: "get_mouse_x()", tag: "input" },
+        { label: "get_mouse_y", desc: "マウスのY座標を取得", code: "get_mouse_y()", tag: "input" },
+        { label: "is_mouse_down", desc: "マウス押下判定 (0:左, 1:中, 2:右)", code: "is_mouse_down(${1:0})", tag: "input" },
+        { label: "is_key_down", desc: "キー押下判定 (\"a\", \"ArrowUp\"等)", code: "is_key_down(\"${1:a}\")", tag: "input" },
+        { label: "get_last_key", desc: "最後に押されたキー名を取得", code: "get_last_key()", tag: "input" },
         { label: "set_bg", desc: "背景色を変更", code: "set_bg(\"${1:#1a0033}\")", tag: "sys" },
         { label: "reset_bg", desc: "背景色を初期状態に戻す", code: "reset_bg()", tag: "sys" },
         { label: "print", desc: "コンソール出力", code: "print(${1:\"Hello\"})", tag: "sys" },
@@ -615,6 +693,45 @@
             return 0;
           });
           fengari.lua.lua_setglobal(L, fengari.to_luastring("reset_bg"));
+
+          /* --- 入力検知用 API バインド --- */
+
+          // APIバインド: get_mouse_x()
+          fengari.lua.lua_pushjsfunction(L, function(L_ptr) {
+            fengari.lua.lua_pushnumber(L_ptr, inputMouseX);
+            return 1;
+          });
+          fengari.lua.lua_setglobal(L, fengari.to_luastring("get_mouse_x"));
+
+          // APIバインド: get_mouse_y()
+          fengari.lua.lua_pushjsfunction(L, function(L_ptr) {
+            fengari.lua.lua_pushnumber(L_ptr, inputMouseY);
+            return 1;
+          });
+          fengari.lua.lua_setglobal(L, fengari.to_luastring("get_mouse_y"));
+
+          // APIバインド: is_mouse_down(btn) (0:左, 1:中, 2:右)
+          fengari.lua.lua_pushjsfunction(L, function(L_ptr) {
+            const btn = fengari.lua.lua_isnoneornil(L_ptr, 1) ? 0 : (fengari.lua.lua_tonumber(L_ptr, 1) || 0);
+            fengari.lua.lua_pushboolean(L_ptr, !!inputMouseButtons[btn]);
+            return 1;
+          });
+          fengari.lua.lua_setglobal(L, fengari.to_luastring("is_mouse_down"));
+
+          // APIバインド: is_key_down(keyName)
+          fengari.lua.lua_pushjsfunction(L, function(L_ptr) {
+            const key = fengari.lua.lua_tojsstring(L_ptr, 1) || "";
+            fengari.lua.lua_pushboolean(L_ptr, !!inputKeyState[key]);
+            return 1;
+          });
+          fengari.lua.lua_setglobal(L, fengari.to_luastring("is_key_down"));
+
+          // APIバインド: get_last_key()
+          fengari.lua.lua_pushjsfunction(L, function(L_ptr) {
+            fengari.lua.lua_pushstring(L_ptr, fengari.to_luastring(inputLastKey || ""));
+            return 1;
+          });
+          fengari.lua.lua_setglobal(L, fengari.to_luastring("get_last_key"));
 
           const co = fengari.lua.lua_newthread(L);
           const status = fengari.lauxlib.luaL_loadstring(co, fengari.to_luastring(code));
