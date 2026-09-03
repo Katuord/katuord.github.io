@@ -19,7 +19,6 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.38.0/min/vs/loader.min.js"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <style>
-    /* 以前のデザインを完全維持 */
     :root {
       --bg-dark: #090a0f; --panel-bg: rgba(22, 24, 36, 0.75); --card-bg: rgba(31, 34, 51, 0.85);
       --accent-primary: #7c4dff; --accent-glow: rgba(124, 77, 255, 0.5); --accent-success: #00e676;
@@ -27,7 +26,7 @@
       --text-main: #e0e6ed; --text-sub: #90a4ae; --border-color: rgba(42, 46, 69, 0.8); --glass-blur: blur(16px);
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: 'Inter', sans-serif; background: radial-gradient(circle at top right, #1a1c29, var(--bg-dark)); color: var(--text-main); height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+    body { font-family: 'Inter', sans-serif; background: radial-gradient(circle at top right, #1a1c29, var(--bg-dark)); color: var(--text-main); height: 100vh; display: flex; flex-direction: column; overflow: hidden; transition: background 0.3s ease; }
     ::-webkit-scrollbar { width: 8px; height: 8px; } ::-webkit-scrollbar-track { background: transparent; } ::-webkit-scrollbar-thumb { background: #3a3f58; border-radius: 4px; } ::-webkit-scrollbar-thumb:hover { background: var(--accent-primary); }
     
     .top-bar-container { background: var(--panel-bg); backdrop-filter: var(--glass-blur); border-bottom: 1px solid var(--border-color); display: flex; flex-direction: column; z-index: 100; box-shadow: 0 4px 30px rgba(0, 0, 0, 0.4); }
@@ -66,7 +65,12 @@
     .tab-btn { padding: 10px 20px; border: none; background: transparent; color: var(--text-sub); font-size: 12px; border-bottom: 2px solid transparent; }
     .tab-btn.active { color: #fff; border-bottom-color: var(--accent-primary); background: var(--card-bg); }
     .tab-content { flex: 1; display: flex; flex-direction: column; padding: 16px; overflow-y: auto; }
-    #console-output { flex: 1; font-family: 'Fira Code', monospace; font-size: 14px; white-space: pre-wrap; word-break: break-all; background: rgba(0,0,0,0.4); padding: 12px; border-radius: 8px; border: 1px solid var(--border-color); overflow-y: auto; scroll-behavior: smooth; }
+    
+    /* 描画用キャンバスエリア */
+    #canvas-container { width: 100%; margin-bottom: 12px; display: flex; flex-direction: column; gap: 4px; }
+    #screen-canvas { width: 100%; height: 150px; background: #000; border-radius: 8px; border: 1px solid var(--border-color); display: block; }
+    
+    #console-output { flex: 1; font-family: 'Fira Code', monospace; font-size: 14px; white-space: pre-wrap; word-break: break-all; background: rgba(0,0,0,0.4); padding: 12px; border-radius: 8px; border: 1px solid var(--border-color); overflow-y: auto; scroll-behavior: smooth; min-height: 120px; }
     
     .exec-time { font-size: 11px; color: #ffeb3b; margin-top: 10px; border-top: 1px dashed var(--border-color); padding-top: 5px; text-align: right; }
     
@@ -122,10 +126,13 @@
     
     <div class="output-panel">
       <div class="panel-tabs">
-        <button class="tab-btn active"><i class="fa-solid fa-terminal"></i> ターミナル & AI診断</button>
-        <button class="icon-btn" title="ログを消去" onclick="clearConsole()"><i class="fa-solid fa-eraser"></i></button>
+        <button class="tab-btn active"><i class="fa-solid fa-terminal"></i> 画面描画 & ターミナル</button>
+        <button class="icon-btn" title="画面とログを消去" onclick="clearConsole()"><i class="fa-solid fa-eraser"></i></button>
       </div>
       <div id="tab-console" class="tab-content">
+        <div id="canvas-container">
+          <canvas id="screen-canvas" width="400" height="150"></canvas>
+        </div>
         <div id="console-output">実行待ち...</div>
       </div>
     </div>
@@ -148,42 +155,31 @@
     let minimapEnabled = true;
     let wandboxCompilers = { python: 'cpython-3.11.4' };
 
-    // --- 大幅強化されたスニペット・予測変換データ ---
+    // --- 拡張版スニペット & Autocomplete ---
     const snippetDefinitions = {
       lua: [
+        { label: "draw_rect", desc: "四角形を描画", code: "draw_rect(${1:x}, ${2:y}, ${3:width}, ${4:height}, \"${5:#00e676}\")" },
+        { label: "clear_canvas", desc: "画面描画をクリア", code: "clear_canvas()" },
+        { label: "play_sound", desc: "音を鳴らす (周波数, 秒数)", code: "play_sound(${1:440}, ${2:0.2})" },
+        { label: "set_bg", desc: "背景色を変更", code: "set_bg(\"${1:#090a0f}\")" },
         { label: "print", desc: "コンソール出力", code: "print(${1})" },
-        { label: "wait", desc: "指定秒数待機(独自)", code: "wait(${1:1})" },
+        { label: "wait", desc: "指定秒数待機", code: "wait(${1:1})" },
         { label: "local function", desc: "関数定義", code: "local function ${1:name}(${2:args})\n\t${3}\nend" },
         { label: "for i=1,n", desc: "数値forループ", code: "for ${1:i} = ${2:1}, ${3:10} do\n\t${4}\nend" },
         { label: "for pairs", desc: "テーブル全要素ループ", code: "for ${1:key}, ${2:value} in pairs(${3:table}) do\n\t${4}\nend" },
         { label: "for ipairs", desc: "配列ループ", code: "for ${1:index}, ${2:value} in ipairs(${3:array}) do\n\t${4}\nend" },
         { label: "if", desc: "if文", code: "if ${1:condition} then\n\t${2}\nend" },
-        { label: "if else", desc: "if-else文", code: "if ${1:condition} then\n\t${2}\nelse\n\t${3}\nend" },
         { label: "while", desc: "whileループ", code: "while ${1:true} do\n\t${2}\nend" },
         { label: "math.random", desc: "乱数生成", code: "math.random(${1:min}, ${2:max})" },
-        { label: "math.floor", desc: "切り捨て", code: "math.floor(${1:number})" },
-        { label: "math.ceil", desc: "切り上げ", code: "math.ceil(${1:number})" },
-        { label: "math.abs", desc: "絶対値", code: "math.abs(${1:number})" },
-        { label: "table.insert", desc: "配列に追加", code: "table.insert(${1:table}, ${2:value})" },
-        { label: "table.remove", desc: "配列から削除", code: "table.remove(${1:table}, ${2:index})" },
-        { label: "table.sort", desc: "配列をソート", code: "table.sort(${1:table})" },
-        { label: "string.sub", desc: "文字列切り出し", code: "string.sub(${1:str}, ${2:start}, ${3:end})" },
-        { label: "string.find", desc: "文字列検索", code: "string.find(${1:str}, ${2:pattern})" },
-        { label: "string.lower", desc: "小文字変換", code: "string.lower(${1:str})" },
-        { label: "string.upper", desc: "大文字変換", code: "string.upper(${1:str})" },
-        { label: "tostring", desc: "文字列に変換", code: "tostring(${1:value})" },
-        { label: "tonumber", desc: "数値に変換", code: "tonumber(${1:value})" },
-        { label: "type", desc: "型を取得", code: "type(${1:value})" }
+        { label: "table.insert", desc: "配列に追加", code: "table.insert(${1:table}, ${2:value})" }
       ],
       javascript: [
         { label: "console.log", desc: "ログ出力", code: "console.log(${1});" },
-        { label: "function", desc: "関数定義", code: "function ${1:name}(${2:args}) {\n\t${3}\n}" },
-        { label: "for", desc: "forループ", code: "for (let ${1:i} = 0; ${1:i} < ${2:10}; ${1:i}++) {\n\t${3}\n}" }
+        { label: "function", desc: "関数定義", code: "function ${1:name}(${2:args}) {\n\t${3}\n}" }
       ],
       python: [
         { label: "print", desc: "コンソール出力", code: "print(${1})" },
-        { label: "def", desc: "関数定義", code: "def ${1:name}(${2:args}):\n\t${3}" },
-        { label: "for", desc: "forループ", code: "for ${1:i} in range(${2:10}):\n\t${3}" }
+        { label: "def", desc: "関数定義", code: "def ${1:name}(${2:args}):\n\t${3}" }
       ]
     };
 
@@ -208,7 +204,6 @@
     require(['vs/editor/editor.main'], function () {
       monaco.editor.defineTheme('ultimate-dark', { base: 'vs-dark', inherit: true, rules: [{ background: '090a0f' }], colors: { 'editor.background': '#090a0f00' } });
 
-      // ★ カスタム予測変換をエディタ内に登録 (Ctrl+Spaceで表示)
       ['lua', 'javascript', 'python'].forEach(lang => {
           monaco.languages.registerCompletionItemProvider(lang, {
               provideCompletionItems: function(model, position) {
@@ -227,7 +222,8 @@
           });
       });
 
-      let initCode = `local CounterNumber = 0\nlocal MyPlayerName = "Hero"\n\n-- Counter\nlocal function counter(numbercount, waitnumber, number)\n    numbercount = numbercount - 1\n    for i = 1, number do\n        numbercount = numbercount + 1\n        print(MyPlayerName .. " のカウント: " .. numbercount)\n        wait(waitnumber)\n    end\nend\n\ncounter(1, 1, 5)`;
+      // 最初のサンプルコード（描画＋効果音付き）
+      let initCode = `-- Apex Studio V9.5 画面描画&サウンドデモ\nclear_canvas()\nprint("音階アニメーションを開始します...")\n\nlocal notes = {261.63, 293.66, 329.63, 349.23, 392.00, 440.00, 493.88, 523.25}\nlocal colors = {"#ff5252", "#ff9100", "#ffea00", "#00e676", "#00b0ff", "#651fff", "#d500f9", "#ffffff"}\n\nfor i = 1, #notes do\n    local x = (i - 1) * 45 + 20\n    draw_rect(x, 30, 35, 90, colors[i])\n    play_sound(notes[i], 0.15)\n    print("Note " .. i .. ": " .. math.floor(notes[i]) .. " Hz")\n    wait(0.2)\nend\n\nprint("完了！🎉")`;
 
       if (window.location.hash.startsWith('#code=')) {
           try { initCode = decodeURIComponent(escape(atob(window.location.hash.replace('#code=', '')))); window.location.hash = ''; } catch(e) {}
@@ -235,7 +231,6 @@
           initCode = localStorage.getItem('apex_autosave_tab1') || initCode;
       }
 
-      // ★ wordBasedSuggestions: "currentDocument" で自分で作った変数名も自動予測変換されるよう設定
       editor = monaco.editor.create(document.getElementById('editor-container'), {
         value: initCode, language: localStorage.getItem('apex_lang_tab1') || 'lua', theme: 'ultimate-dark', fontSize: editorFontSize, fontFamily: "'Fira Code', 'Consolas', monospace",
         automaticLayout: true, minimap: { enabled: minimapEnabled }, bracketPairColorization: { enabled: true }, autoClosingBrackets: "always", autoClosingQuotes: "always",
@@ -250,7 +245,16 @@
     });
 
     function formatCode() { editor.getAction('editor.action.formatDocument').run(); }
-    function clearConsole() { document.getElementById('console-output').innerHTML = '<span style="color:var(--text-sub);">実行待ち...</span>'; }
+    
+    function clearConsole() { 
+      document.getElementById('console-output').innerHTML = '<span style="color:var(--text-sub);">実行待ち...</span>'; 
+      const cvs = document.getElementById('screen-canvas');
+      if (cvs) {
+        const ctx = cvs.getContext('2d');
+        ctx.clearRect(0, 0, cvs.width, cvs.height);
+      }
+    }
+
     function changeFontSize(delta) { editorFontSize = Math.max(10, Math.min(30, editorFontSize + delta)); editor.updateOptions({ fontSize: editorFontSize }); }
     function toggleMinimap() { minimapEnabled = !minimapEnabled; editor.updateOptions({ minimap: { enabled: minimapEnabled } }); }
 
@@ -320,6 +324,9 @@
           const L = fengari.lauxlib.luaL_newstate();
           fengari.lualib.luaL_openlibs(L);
 
+          // --- Lua拡張API登録 ---
+
+          // 1. print(...)
           fengari.lua.lua_pushjsfunction(L, function(L_ptr) {
             const top = fengari.lua.lua_gettop(L_ptr);
             let strArr = [];
@@ -335,12 +342,69 @@
           });
           fengari.lua.lua_setglobal(L, fengari.to_luastring("print"));
 
+          // 2. wait(sec)
           fengari.lua.lua_pushjsfunction(L, function(L_ptr) {
             const sec = fengari.lua.lua_tonumber(L_ptr, 1) || 0;
             fengari.lua.lua_pushnumber(L_ptr, sec);
             return fengari.lua.lua_yield(L_ptr, 1);
           });
           fengari.lua.lua_setglobal(L, fengari.to_luastring("wait"));
+
+          // 3. draw_rect(x, y, w, h, color)
+          fengari.lua.lua_pushjsfunction(L, function(L_ptr) {
+            const x = fengari.lua.lua_tonumber(L_ptr, 1) || 0;
+            const y = fengari.lua.lua_tonumber(L_ptr, 2) || 0;
+            const w = fengari.lua.lua_tonumber(L_ptr, 3) || 10;
+            const h = fengari.lua.lua_tonumber(L_ptr, 4) || 10;
+            const color = fengari.lua.lua_tojsstring(L_ptr, 5) || "#00e676";
+            const cvs = document.getElementById('screen-canvas');
+            if (cvs) {
+              const ctx = cvs.getContext('2d');
+              ctx.fillStyle = color;
+              ctx.fillRect(x, y, w, h);
+            }
+            return 0;
+          });
+          fengari.lua.lua_setglobal(L, fengari.to_luastring("draw_rect"));
+
+          // 4. clear_canvas()
+          fengari.lua.lua_pushjsfunction(L, function(L_ptr) {
+            const cvs = document.getElementById('screen-canvas');
+            if (cvs) {
+              const ctx = cvs.getContext('2d');
+              ctx.clearRect(0, 0, cvs.width, cvs.height);
+            }
+            return 0;
+          });
+          fengari.lua.lua_setglobal(L, fengari.to_luastring("clear_canvas"));
+
+          // 5. play_sound(freq, duration)
+          fengari.lua.lua_pushjsfunction(L, function(L_ptr) {
+            const freq = fengari.lua.lua_tonumber(L_ptr, 1) || 440;
+            const duration = fengari.lua.lua_tonumber(L_ptr, 2) || 0.1;
+            try {
+              const AudioCtx = window.AudioContext || window.webkitAudioContext;
+              if (AudioCtx) {
+                const ctx = new AudioCtx();
+                const osc = ctx.createOscillator();
+                osc.type = 'square';
+                osc.frequency.value = freq;
+                osc.connect(ctx.destination);
+                osc.start();
+                osc.stop(ctx.currentTime + duration);
+              }
+            } catch(e) {}
+            return 0;
+          });
+          fengari.lua.lua_setglobal(L, fengari.to_luastring("play_sound"));
+
+          // 6. set_bg(color)
+          fengari.lua.lua_pushjsfunction(L, function(L_ptr) {
+            const color = fengari.lua.lua_tojsstring(L_ptr, 1) || "#090a0f";
+            document.body.style.background = color;
+            return 0;
+          });
+          fengari.lua.lua_setglobal(L, fengari.to_luastring("set_bg"));
 
           const co = fengari.lua.lua_newthread(L);
           const status = fengari.lauxlib.luaL_loadstring(co, fengari.to_luastring(code));
