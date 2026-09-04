@@ -315,6 +315,11 @@
             <td><span class="code-inline">create_rect("box1", 10, 10, 50, 50, 45, "#f00")</span></td>
           </tr>
           <tr>
+            <td><span class="code-inline">create_text(id, text, x, y, size, font, color)</span></td>
+            <td>名前付きの自動描画テキストを作成</td>
+            <td><span class="code-inline">create_text("txt1", "Hello", 20, 20, 24, "Arial", "#fff")</span></td>
+          </tr>
+          <tr>
             <td><span class="code-inline">play_sound(freq, sec)</span></td>
             <td>指定の周波数(Hz)で音を鳴らす</td>
             <td><span class="code-inline">play_sound(440, 0.2)</span></td>
@@ -382,15 +387,17 @@
 
     /* --- 新しいオブジェクト管理描画用の変数 --- */
     let managedRects = {};
+    let managedTexts = {}; // ★追加：テキストオブジェクト管理用
 
     /* --- オブジェクト自動描画ループ --- */
     function renderLoop() {
       const cvs = document.getElementById('screen-canvas');
-      if (cvs && Object.keys(managedRects).length > 0) {
+      if (cvs && (Object.keys(managedRects).length > 0 || Object.keys(managedTexts).length > 0)) {
         const ctx = cvs.getContext('2d');
         // 自動管理オブジェクトが存在する場合は毎フレームクリアして描画する
         ctx.clearRect(0, 0, cvs.width, cvs.height);
         
+        // 四角形の描画
         for (const key in managedRects) {
           const r = managedRects[key];
           ctx.save();
@@ -399,6 +406,19 @@
           ctx.rotate((r.rot * Math.PI) / 180);
           ctx.fillStyle = r.color;
           ctx.fillRect(-r.w / 2, -r.h / 2, r.w, r.h);
+          ctx.restore();
+        }
+
+        // ★追加：テキストの描画
+        for (const key in managedTexts) {
+          const t = managedTexts[key];
+          ctx.save();
+          ctx.translate(t.x, t.y);
+          ctx.rotate((t.rot * Math.PI) / 180);
+          ctx.font = t.textsize + "px '" + t.font + "'";
+          ctx.fillStyle = t.color;
+          ctx.textBaseline = "top"; // 座標を左上基準にする
+          ctx.fillText(t.text, 0, 0);
           ctx.restore();
         }
       }
@@ -460,9 +480,9 @@
       lua: [
         { label: "local", desc: "ローカル変数宣言", code: "local ${1:name} = ${2:value}", tag: "sys" },
         { label: "function", desc: "関数定義", code: "function ${1:func_name}(${2:params})\n\t${3}\nend", tag: "sys" },
-        { label: "local function", desc: "ローカル関数定義", code: "local function ${1:func_name}(${2:params})\n\t${3}\nend", tag: "sys" },
         { label: "create_rect", desc: "自動描画の四角形を作成", code: "create_rect(\"${1:name}\", ${2:x}, ${3:y}, ${4:w}, ${5:h}, ${6:rot}, \"${7:#ffffff}\")", tag: "draw" },
         { label: "moverect", desc: "自動描画の四角形を移動", code: "moverect(\"${1:name}\", ${2:x}, ${3:y})", tag: "draw" },
+        { label: "create_text", desc: "自動描画のテキストを作成", code: "create_text(\"${1:id}\", \"${2:text}\", ${3:x}, ${4:y}, ${5:24}, \"${6:Arial}\", \"${7:#ffffff}\")", tag: "draw" },
         { label: "draw_rect", desc: "即時で四角形を描画", code: "draw_rect(${1:x}, ${2:y}, ${3:width}, ${4:height}, \"${5:#00e676}\")", tag: "draw" },
         { label: "clear_canvas", desc: "画面描画をクリア", code: "clear_canvas()", tag: "draw" },
         { label: "play_sound", desc: "音を鳴らす (周波数, 秒)", code: "play_sound(${1:440}, ${2:0.2})", tag: "sound" },
@@ -476,7 +496,6 @@
         { label: "print", desc: "コンソール出力", code: "print(${1:\"Hello\"})", tag: "sys" },
         { label: "wait", desc: "指定秒数待機", code: "wait(${1:0.5})", tag: "sys" },
         { label: "for i=1,n", desc: "数値ループ", code: "for ${1:i} = ${2:1}, ${3:10} do\n\t${4}\nend", tag: "sys" },
-        { label: "for in pairs", desc: "テーブル巡回", code: "for ${1:k}, ${2:v} in pairs(${3:table}) do\n\t${4}\nend", tag: "sys" },
         { label: "if", desc: "条件分岐", code: "if ${1:condition} then\n\t${2}\nend", tag: "sys" }
       ],
       javascript: [
@@ -494,25 +513,7 @@
     const luaAutocompleteCandidates = [
       { label: 'local', kind: 'Keyword', insertText: 'local ${1:name} = ${2:value}', isSnippet: true, detail: 'ローカル変数を宣言' },
       { label: 'function', kind: 'Keyword', insertText: 'function ${1:name}(${2:params})\n\t${3}\nend', isSnippet: true, detail: '関数を定義' },
-      { label: 'local function', kind: 'Keyword', insertText: 'local function ${1:name}(${2:params})\n\t${3}\nend', isSnippet: true, detail: 'ローカル関数を定義' },
       { label: 'if', kind: 'Keyword', insertText: 'if ${1:condition} then\n\t${2}\nend', isSnippet: true, detail: '条件分岐 (if)' },
-      { label: 'then', kind: 'Keyword', insertText: 'then', isSnippet: false, detail: 'then キーワード' },
-      { label: 'elseif', kind: 'Keyword', insertText: 'elseif ${1:condition} then\n\t${2}', isSnippet: true, detail: '条件分岐 (elseif)' },
-      { label: 'else', kind: 'Keyword', insertText: 'else\n\t${1}', isSnippet: true, detail: '条件分岐 (else)' },
-      { label: 'end', kind: 'Keyword', insertText: 'end', isSnippet: false, detail: 'ブロックを終了 (end)' },
-      { label: 'for', kind: 'Keyword', insertText: 'for ${1:i} = ${2:1}, ${3:10} do\n\t${4}\nend', isSnippet: true, detail: '数値ループ (for)' },
-      { label: 'for in pairs', kind: 'Snippet', insertText: 'for ${1:k}, ${2:v} in pairs(${3:tbl}) do\n\t${4}\nend', isSnippet: true, detail: 'テーブル巡回' },
-      { label: 'for in ipairs', kind: 'Snippet', insertText: 'for ${1:i}, ${2:v} in ipairs(${3:arr}) do\n\t${4}\nend', isSnippet: true, detail: '配列巡回' },
-      { label: 'while', kind: 'Keyword', insertText: 'while ${1:condition} do\n\t${2}\nend', isSnippet: true, detail: 'while ループ' },
-      { label: 'repeat', kind: 'Keyword', insertText: 'repeat\n\t${1}\nuntil ${2:condition}', isSnippet: true, detail: 'repeat-until ループ' },
-      { label: 'return', kind: 'Keyword', insertText: 'return ${1}', isSnippet: true, detail: '値を返す' },
-      { label: 'break', kind: 'Keyword', insertText: 'break', isSnippet: false, detail: 'ループ脱出' },
-      { label: 'nil', kind: 'Keyword', insertText: 'nil', isSnippet: false, detail: 'nil 値' },
-      { label: 'true', kind: 'Keyword', insertText: 'true', isSnippet: false, detail: '真 (true)' },
-      { label: 'false', kind: 'Keyword', insertText: 'false', isSnippet: false, detail: '偽 (false)' },
-      { label: 'and', kind: 'Keyword', insertText: 'and', isSnippet: false, detail: '論理積 (and)' },
-      { label: 'or', kind: 'Keyword', insertText: 'or', isSnippet: false, detail: '論理和 (or)' },
-      { label: 'not', kind: 'Keyword', insertText: 'not', isSnippet: false, detail: '論理否定 (not)' },
       
       // Apex Studio API (既存)
       { label: 'draw_rect', kind: 'Function', insertText: 'draw_rect(${1:x}, ${2:y}, ${3:width}, ${4:height}, \"${5:#00e676}\")', isSnippet: true, detail: '指定位置に四角形を即時描画' },
@@ -528,31 +529,32 @@
       { label: 'print', kind: 'Function', insertText: 'print(${1:val})', isSnippet: true, detail: 'コンソールログ出力' },
       { label: 'wait', kind: 'Function', insertText: 'wait(${1:0.5})', isSnippet: true, detail: '指定秒数スリープ' },
 
-      // ★Apex Studio API (新規追加オブジェクトAPI)
+      // Apex Studio API (四角形オブジェクト)
       { label: 'create_rect', kind: 'Function', insertText: 'create_rect("${1:name}", ${2:x}, ${3:y}, ${4:sizex}, ${5:sizey}, ${6:rotation}, "${7:#ffffff}")', isSnippet: true, detail: '自動描画の四角形を作成' },
       { label: 'moverect', kind: 'Function', insertText: 'moverect("${1:rectname}", ${2:x}, ${3:y})', isSnippet: true, detail: '自動描画の四角形を移動' },
       { label: 'sizingrect', kind: 'Function', insertText: 'sizingrect("${1:rectname}", ${2:sizex}, ${3:sizey})', isSnippet: true, detail: '自動描画の四角形のサイズ変更' },
       { label: 'rotationrect', kind: 'Function', insertText: 'rotationrect("${1:rectname}", ${2:rotation})', isSnippet: true, detail: '自動描画の四角形を回転(度)' },
       { label: 'colorrect', kind: 'Function', insertText: 'colorrect("${1:rectname}", "${2:color}")', isSnippet: true, detail: '自動描画の四角形の色変更' },
 
+      // ★Apex Studio API (新規追加：テキストオブジェクトAPI)
+      { label: 'create_text', kind: 'Function', insertText: 'create_text("${1:id}", "${2:text}", ${3:x}, ${4:y}, ${5:24}, "${6:Arial}", "${7:#ffffff}")', isSnippet: true, detail: '自動描画のテキストを作成' },
+      { label: 'delete_text', kind: 'Function', insertText: 'delete_text("${1:id}")', isSnippet: true, detail: '自動描画のテキストを削除' },
+      { label: 'rotation_text', kind: 'Function', insertText: 'rotation_text("${1:id}", ${2:rotation})', isSnippet: true, detail: '自動描画のテキストを回転(度)' },
+      { label: 'move_text', kind: 'Function', insertText: 'move_text("${1:id}", ${2:x}, ${3:y})', isSnippet: true, detail: '自動描画のテキストを移動' },
+      { label: 'sizing_text', kind: 'Function', insertText: 'sizing_text("${1:id}", ${2:textsize})', isSnippet: true, detail: '自動描画のテキストのサイズ変更' },
+
       // 標準ライブラリ
       { label: 'math.floor', kind: 'Function', insertText: 'math.floor(${1:x})', isSnippet: true, detail: '小数点以下切り捨て' },
       { label: 'math.ceil', kind: 'Function', insertText: 'math.ceil(${1:x})', isSnippet: true, detail: '小数点以下切り上げ' },
-      { label: 'math.random', kind: 'Function', insertText: 'math.random(${1:min}, ${2:max})', isSnippet: true, detail: '乱数を生成' },
-      { label: 'math.abs', kind: 'Function', insertText: 'math.abs(${1:x})', isSnippet: true, detail: '絶対値を計算' },
-      { label: 'table.insert', kind: 'Function', insertText: 'table.insert(${1:tbl}, ${2:val})', isSnippet: true, detail: 'テーブルに要素を追加' },
-      { label: 'table.remove', kind: 'Function', insertText: 'table.remove(${1:tbl}, ${2:pos})', isSnippet: true, detail: 'テーブルから要素を削除' },
-      { label: 'string.sub', kind: 'Function', insertText: 'string.sub(${1:str}, ${2:i}, ${3:j})', isSnippet: true, detail: '文字列の部分切り出し' },
-      { label: 'pairs', kind: 'Function', insertText: 'pairs(${1:tbl})', isSnippet: true, detail: 'テーブルキーバリューイテレータ' },
-      { label: 'ipairs', kind: 'Function', insertText: 'ipairs(${1:tbl})', isSnippet: true, detail: '配列インデックスイテレータ' }
+      { label: 'math.random', kind: 'Function', insertText: 'math.random(${1:min}, ${2:max})', isSnippet: true, detail: '乱数を生成' }
     ];
 
     const defaultLuaCode = `-- 新しいオブジェクト管理APIのテスト
 reset_bg()
 
--- 名前を指定して四角形を作るだけで、裏で勝手に描画され続けます
+-- 名前を指定して四角形とテキストを作る
 create_rect("box1", 50, 50, 40, 40, 0, "#00eeff")
-create_rect("box2", 200, 50, 60, 20, 0, "#ffb300")
+create_text("title1", "Hello Lua!", 150, 50, 24, "Arial", "#ffffff")
 
 local angle = 0
 
@@ -563,9 +565,10 @@ while true do
     -- "box1" を回転させる
     rotationrect("box1", angle)
     
-    -- "box2" を動かしながら回転させる
-    moverect("box2", 200, 50 + math.sin(angle * 0.05) * 40)
-    rotationrect("box2", -angle)
+    -- テキストを動かしながら回転・サイズ変更させる
+    move_text("title1", 150, 50 + math.sin(angle * 0.05) * 20)
+    rotation_text("title1", math.sin(angle * 0.1) * 10)
+    sizing_text("title1", 24 + math.sin(angle * 0.05) * 5)
     
     wait(0.02)
 end`;
@@ -588,19 +591,10 @@ end`;
           {
             beforeText: /^\s*(?:function\b.*|local\s+function\b.*|if\b.*then|for\b.*do|while\b.*do|do)\s*$/,
             action: { indentAction: monaco.languages.IndentAction.IndentOutdent, appendText: '\nend' }
-          },
-          {
-            beforeText: /^\s*repeat\s*$/,
-            action: { indentAction: monaco.languages.IndentAction.IndentOutdent, appendText: '\nuntil ' }
-          },
-          {
-            beforeText: /^\s*(?:else|elseif\b.*)\s*$/,
-            action: { indentAction: monaco.languages.IndentAction.Indent }
           }
         ]
       });
 
-      // ★エディタの予測変換 (補完プロバイダ) をフル強化
       monaco.languages.registerCompletionItemProvider('lua', {
         provideCompletionItems: function(model, position) {
           const word = model.getWordUntilPosition(position);
@@ -611,7 +605,6 @@ end`;
             endColumn: word.endColumn 
           };
 
-          // 1. デフォルトAPIとスニペット
           const suggestions = luaAutocompleteCandidates.map(item => {
             let kind = monaco.languages.CompletionItemKind.Keyword;
             if (item.kind === 'Function') kind = monaco.languages.CompletionItemKind.Function;
@@ -627,39 +620,10 @@ end`;
             };
           });
 
-          // 2. 現在のエディタ内の「全ての変数」「関数」を動的に取得して追加！
-          const text = model.getValue();
-          
-          // 関数の抽出
-          const funcRegex = /(?:function|local\s+function)\s+([a-zA-Z_]\w*)/g;
-          let match;
-          while ((match = funcRegex.exec(text)) !== null) {
-            suggestions.push({
-              label: match[1],
-              kind: monaco.languages.CompletionItemKind.Function,
-              insertText: match[1] + "()",
-              detail: "作成済みファンクション",
-              range: range
-            });
-          }
-
-          // 変数の抽出
-          const varRegex = /local\s+([a-zA-Z_]\w*)\s*(?:=|,)/g;
-          while ((match = varRegex.exec(text)) !== null) {
-            suggestions.push({
-              label: match[1],
-              kind: monaco.languages.CompletionItemKind.Variable,
-              insertText: match[1],
-              detail: "作成済み変数",
-              range: range
-            });
-          }
-
           return { suggestions: suggestions };
         }
       });
 
-      // 他言語用（JS / Python）
       ['javascript', 'python'].forEach(lang => {
         monaco.languages.registerCompletionItemProvider(lang, {
           provideCompletionItems: function(model, position) {
@@ -690,11 +654,7 @@ end`;
         minimap: { enabled: minimapEnabled }, 
         autoClosingBrackets: "always", 
         autoClosingQuotes: "always",
-        quickSuggestions: {
-          other: true,
-          comments: true,
-          strings: true
-        },
+        quickSuggestions: { other: true, comments: true, strings: true },
         suggestOnTriggerCharacters: true,
         acceptSuggestionOnEnter: "on"
       });
@@ -728,7 +688,8 @@ end`;
         const ctx = cvs.getContext('2d');
         ctx.clearRect(0, 0, cvs.width, cvs.height);
       }
-      managedRects = {}; // オブジェクトもクリア
+      managedRects = {}; 
+      managedTexts = {}; // ★追加：テキストオブジェクトもクリア
     }
 
     function changeFontSize(delta) { 
@@ -798,6 +759,7 @@ end`;
       
       // ★実行のたびにオブジェクトをリセットする
       managedRects = {};
+      managedTexts = {}; // ★追加：実行時にテキストもリセット
 
       const startTime = performance.now();
 
@@ -812,7 +774,70 @@ end`;
           fengari.lualib.luaL_openlibs(L);
 
           /* ========================================================
-             新規追加：オブジェクト管理型 描画 API バインディング
+             新規追加：テキストオブジェクトAPI バインディング
+          ======================================================== */
+
+          // create_text(id, text, x, y, textsize, font, color)
+          fengari.lua.lua_pushjsfunction(L, function(L_ptr) {
+            const id = fengari.lua.lua_tojsstring(L_ptr, 1) || "text1";
+            const text = fengari.lua.lua_tojsstring(L_ptr, 2) || "";
+            const x = fengari.lua.lua_tonumber(L_ptr, 3) || 0;
+            const y = fengari.lua.lua_tonumber(L_ptr, 4) || 0;
+            const textsize = fengari.lua.lua_tonumber(L_ptr, 5) || 12;
+            const font = fengari.lua.lua_tojsstring(L_ptr, 6) || "Arial";
+            const color = fengari.lua.lua_tojsstring(L_ptr, 7) || "#ffffff";
+            managedTexts[id] = { text: text, x: x, y: y, textsize: textsize, font: font, color: color, rot: 0 };
+            return 0;
+          });
+          fengari.lua.lua_setglobal(L, fengari.to_luastring("create_text"));
+
+          // delete_text(id)
+          fengari.lua.lua_pushjsfunction(L, function(L_ptr) {
+            const id = fengari.lua.lua_tojsstring(L_ptr, 1) || "";
+            if (managedTexts[id]) {
+              delete managedTexts[id];
+            }
+            return 0;
+          });
+          fengari.lua.lua_setglobal(L, fengari.to_luastring("delete_text"));
+
+          // rotation_text(id, rotation)
+          fengari.lua.lua_pushjsfunction(L, function(L_ptr) {
+            const id = fengari.lua.lua_tojsstring(L_ptr, 1) || "";
+            const rot = fengari.lua.lua_tonumber(L_ptr, 2) || 0;
+            if (managedTexts[id]) {
+              managedTexts[id].rot = rot;
+            }
+            return 0;
+          });
+          fengari.lua.lua_setglobal(L, fengari.to_luastring("rotation_text"));
+
+          // move_text(id, x, y)
+          fengari.lua.lua_pushjsfunction(L, function(L_ptr) {
+            const id = fengari.lua.lua_tojsstring(L_ptr, 1) || "";
+            const x = fengari.lua.lua_tonumber(L_ptr, 2) || 0;
+            const y = fengari.lua.lua_tonumber(L_ptr, 3) || 0;
+            if (managedTexts[id]) {
+              managedTexts[id].x = x;
+              managedTexts[id].y = y;
+            }
+            return 0;
+          });
+          fengari.lua.lua_setglobal(L, fengari.to_luastring("move_text"));
+
+          // sizing_text(id, textsize)
+          fengari.lua.lua_pushjsfunction(L, function(L_ptr) {
+            const id = fengari.lua.lua_tojsstring(L_ptr, 1) || "";
+            const textsize = fengari.lua.lua_tonumber(L_ptr, 2) || 12;
+            if (managedTexts[id]) {
+              managedTexts[id].textsize = textsize;
+            }
+            return 0;
+          });
+          fengari.lua.lua_setglobal(L, fengari.to_luastring("sizing_text"));
+
+          /* ========================================================
+             オブジェクト管理型 四角形 API バインディング
           ======================================================== */
           
           // create_rect(name, x, y, sizex, sizey, rotation, color)
