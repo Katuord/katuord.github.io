@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Apex Studio V9.6 - Visual & Realtime Lua</title>
+  <title>Apex Studio V9.7 - Visual & Realtime Lua (Full Version)</title>
 
   <!-- Monaco Editor と Fengari の衝突回避 -->
   <script>
@@ -210,7 +210,7 @@
   <!-- ツールバー -->
   <div class="top-bar-container">
     <header>
-      <div class="brand"><i class="fa-solid fa-code"></i> ApexStudio <span>V9.6</span></div>
+      <div class="brand"><i class="fa-solid fa-code"></i> ApexStudio <span>V9.7 FULL</span></div>
       
       <div class="toolbar">
         <button class="icon-btn btn-help" onclick="toggleHelpModal(true)"><i class="fa-solid fa-circle-question"></i> 使い方ガイド</button>
@@ -310,6 +310,11 @@
             <td><span class="code-inline">draw_rect(10, 10, 50, 50, "#00e676")</span></td>
           </tr>
           <tr>
+            <td><span class="code-inline">create_rect(name, x, y, w, h, rot, color)</span></td>
+            <td>名前付きの自動描画四角形を作成</td>
+            <td><span class="code-inline">create_rect("box1", 10, 10, 50, 50, 45, "#f00")</span></td>
+          </tr>
+          <tr>
             <td><span class="code-inline">play_sound(freq, sec)</span></td>
             <td>指定の周波数(Hz)で音を鳴らす</td>
             <td><span class="code-inline">play_sound(440, 0.2)</span></td>
@@ -375,6 +380,31 @@
     let editorFontSize = 14;
     let minimapEnabled = true;
 
+    /* --- 新しいオブジェクト管理描画用の変数 --- */
+    let managedRects = {};
+
+    /* --- オブジェクト自動描画ループ --- */
+    function renderLoop() {
+      const cvs = document.getElementById('screen-canvas');
+      if (cvs && Object.keys(managedRects).length > 0) {
+        const ctx = cvs.getContext('2d');
+        // 自動管理オブジェクトが存在する場合は毎フレームクリアして描画する
+        ctx.clearRect(0, 0, cvs.width, cvs.height);
+        
+        for (const key in managedRects) {
+          const r = managedRects[key];
+          ctx.save();
+          // オブジェクトの中心を基準にして回転・描画
+          ctx.translate(r.x + r.w / 2, r.y + r.h / 2);
+          ctx.rotate((r.rot * Math.PI) / 180);
+          ctx.fillStyle = r.color;
+          ctx.fillRect(-r.w / 2, -r.h / 2, r.w, r.h);
+          ctx.restore();
+        }
+      }
+      requestAnimationFrame(renderLoop);
+    }
+
     /* --- リアルタイム入力検知用の変数とリスナー --- */
     let inputMouseX = 0;
     let inputMouseY = 0;
@@ -383,6 +413,9 @@
     let inputLastKey = "";
 
     window.addEventListener('DOMContentLoaded', () => {
+      // 描画ループを開始
+      requestAnimationFrame(renderLoop);
+
       const cvs = document.getElementById('screen-canvas');
       if (cvs) {
         cvs.addEventListener('mousemove', (e) => {
@@ -428,7 +461,9 @@
         { label: "local", desc: "ローカル変数宣言", code: "local ${1:name} = ${2:value}", tag: "sys" },
         { label: "function", desc: "関数定義", code: "function ${1:func_name}(${2:params})\n\t${3}\nend", tag: "sys" },
         { label: "local function", desc: "ローカル関数定義", code: "local function ${1:func_name}(${2:params})\n\t${3}\nend", tag: "sys" },
-        { label: "draw_rect", desc: "四角形を描画", code: "draw_rect(${1:x}, ${2:y}, ${3:width}, ${4:height}, \"${5:#00e676}\")", tag: "draw" },
+        { label: "create_rect", desc: "自動描画の四角形を作成", code: "create_rect(\"${1:name}\", ${2:x}, ${3:y}, ${4:w}, ${5:h}, ${6:rot}, \"${7:#ffffff}\")", tag: "draw" },
+        { label: "moverect", desc: "自動描画の四角形を移動", code: "moverect(\"${1:name}\", ${2:x}, ${3:y})", tag: "draw" },
+        { label: "draw_rect", desc: "即時で四角形を描画", code: "draw_rect(${1:x}, ${2:y}, ${3:width}, ${4:height}, \"${5:#00e676}\")", tag: "draw" },
         { label: "clear_canvas", desc: "画面描画をクリア", code: "clear_canvas()", tag: "draw" },
         { label: "play_sound", desc: "音を鳴らす (周波数, 秒)", code: "play_sound(${1:440}, ${2:0.2})", tag: "sound" },
         { label: "get_mouse_x", desc: "マウスのX座標を取得", code: "get_mouse_x()", tag: "input" },
@@ -457,7 +492,6 @@
 
     // Monaco エディタ用の拡張予測変換（キーワード・スニペット・組み込み API）
     const luaAutocompleteCandidates = [
-      // Lua 予約語 / キーキーワード
       { label: 'local', kind: 'Keyword', insertText: 'local ${1:name} = ${2:value}', isSnippet: true, detail: 'ローカル変数を宣言' },
       { label: 'function', kind: 'Keyword', insertText: 'function ${1:name}(${2:params})\n\t${3}\nend', isSnippet: true, detail: '関数を定義' },
       { label: 'local function', kind: 'Keyword', insertText: 'local function ${1:name}(${2:params})\n\t${3}\nend', isSnippet: true, detail: 'ローカル関数を定義' },
@@ -480,8 +514,8 @@
       { label: 'or', kind: 'Keyword', insertText: 'or', isSnippet: false, detail: '論理和 (or)' },
       { label: 'not', kind: 'Keyword', insertText: 'not', isSnippet: false, detail: '論理否定 (not)' },
       
-      // Apex Studio API
-      { label: 'draw_rect', kind: 'Function', insertText: 'draw_rect(${1:x}, ${2:y}, ${3:width}, ${4:height}, \"${5:#00e676}\")', isSnippet: true, detail: '指定位置に四角形を描画' },
+      // Apex Studio API (既存)
+      { label: 'draw_rect', kind: 'Function', insertText: 'draw_rect(${1:x}, ${2:y}, ${3:width}, ${4:height}, \"${5:#00e676}\")', isSnippet: true, detail: '指定位置に四角形を即時描画' },
       { label: 'clear_canvas', kind: 'Function', insertText: 'clear_canvas()', isSnippet: false, detail: 'キャンバス描画を全消去' },
       { label: 'play_sound', kind: 'Function', insertText: 'play_sound(${1:440}, ${2:0.2})', isSnippet: true, detail: '指定周波数の音を鳴らす' },
       { label: 'get_mouse_x', kind: 'Function', insertText: 'get_mouse_x()', isSnippet: false, detail: 'キャンバス内マウスX座標取得' },
@@ -493,6 +527,13 @@
       { label: 'reset_bg', kind: 'Function', insertText: 'reset_bg()', isSnippet: false, detail: '画面背景色を初期化' },
       { label: 'print', kind: 'Function', insertText: 'print(${1:val})', isSnippet: true, detail: 'コンソールログ出力' },
       { label: 'wait', kind: 'Function', insertText: 'wait(${1:0.5})', isSnippet: true, detail: '指定秒数スリープ' },
+
+      // ★Apex Studio API (新規追加オブジェクトAPI)
+      { label: 'create_rect', kind: 'Function', insertText: 'create_rect("${1:name}", ${2:x}, ${3:y}, ${4:sizex}, ${5:sizey}, ${6:rotation}, "${7:#ffffff}")', isSnippet: true, detail: '自動描画の四角形を作成' },
+      { label: 'moverect', kind: 'Function', insertText: 'moverect("${1:rectname}", ${2:x}, ${3:y})', isSnippet: true, detail: '自動描画の四角形を移動' },
+      { label: 'sizingrect', kind: 'Function', insertText: 'sizingrect("${1:rectname}", ${2:sizex}, ${3:sizey})', isSnippet: true, detail: '自動描画の四角形のサイズ変更' },
+      { label: 'rotationrect', kind: 'Function', insertText: 'rotationrect("${1:rectname}", ${2:rotation})', isSnippet: true, detail: '自動描画の四角形を回転(度)' },
+      { label: 'colorrect', kind: 'Function', insertText: 'colorrect("${1:rectname}", "${2:color}")', isSnippet: true, detail: '自動描画の四角形の色変更' },
 
       // 標準ライブラリ
       { label: 'math.floor', kind: 'Function', insertText: 'math.floor(${1:x})', isSnippet: true, detail: '小数点以下切り捨て' },
@@ -506,7 +547,28 @@
       { label: 'ipairs', kind: 'Function', insertText: 'ipairs(${1:tbl})', isSnippet: true, detail: '配列インデックスイテレータ' }
     ];
 
-    const defaultLuaCode = `-- Apex Studio 動作デモ (キー・マウス入力 & 予測変換テスト)\nreset_bg()\nclear_canvas()\nprint("リアルタイム入力テストを開始します...")\n\n-- local / function などの補完候補が即座に表示されます！\nlocal color = "#00e676"\n\nfor i = 1, 6 do\n    local x = (i - 1) * 60 + 20\n    draw_rect(x, 40, 45, 80, color)\n    play_sound(261.63 + i * 30, 0.1)\n    wait(0.15)\nend\n\nprint("画面をクリックするかキーを押してみてください！")`;
+    const defaultLuaCode = `-- 新しいオブジェクト管理APIのテスト
+reset_bg()
+
+-- 名前を指定して四角形を作るだけで、裏で勝手に描画され続けます
+create_rect("box1", 50, 50, 40, 40, 0, "#00eeff")
+create_rect("box2", 200, 50, 60, 20, 0, "#ffb300")
+
+local angle = 0
+
+-- 無限ループでプロパティを変更するだけ！ (毎回clear_canvasする必要なし)
+while true do
+    angle = angle + 5
+    
+    -- "box1" を回転させる
+    rotationrect("box1", angle)
+    
+    -- "box2" を動かしながら回転させる
+    moverect("box2", 200, 50 + math.sin(angle * 0.05) * 40)
+    rotationrect("box2", -angle)
+    
+    wait(0.02)
+end`;
 
     require.config({ paths: { vs: 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.38.0/min/vs' } });
     require(['vs/editor/editor.main'], function () {
@@ -517,7 +579,6 @@
         colors: { 'editor.background': '#090a0f00' } 
       });
 
-      // Luaの言語設定（手入力での改行時に自動でインデントおよび end を自動挿入）
       monaco.languages.setLanguageConfiguration('lua', {
         indentationRules: {
           increaseIndentPattern: /^\s*(?:function|local\s+function|if|then|elseif|else|for|while|do|repeat)\b.*$/,
@@ -525,32 +586,21 @@
         },
         onEnterRules: [
           {
-            // function, if ... then, for ... do, while ... do, do 等の行で改行した際にインデントを入れ下行に end を配置
             beforeText: /^\s*(?:function\b.*|local\s+function\b.*|if\b.*then|for\b.*do|while\b.*do|do)\s*$/,
-            action: {
-              indentAction: monaco.languages.IndentAction.IndentOutdent,
-              appendText: '\nend'
-            }
+            action: { indentAction: monaco.languages.IndentAction.IndentOutdent, appendText: '\nend' }
           },
           {
-            // repeat の行で改行した際に until を配置
             beforeText: /^\s*repeat\s*$/,
-            action: {
-              indentAction: monaco.languages.IndentAction.IndentOutdent,
-              appendText: '\nuntil '
-            }
+            action: { indentAction: monaco.languages.IndentAction.IndentOutdent, appendText: '\nuntil ' }
           },
           {
-            // else / elseif 等でのインデント補助
             beforeText: /^\s*(?:else|elseif\b.*)\s*$/,
-            action: {
-              indentAction: monaco.languages.IndentAction.Indent
-            }
+            action: { indentAction: monaco.languages.IndentAction.Indent }
           }
         ]
       });
 
-      // 予測変換 (補完プロバイダ) の強化登録
+      // ★エディタの予測変換 (補完プロバイダ) をフル強化
       monaco.languages.registerCompletionItemProvider('lua', {
         provideCompletionItems: function(model, position) {
           const word = model.getWordUntilPosition(position);
@@ -561,6 +611,7 @@
             endColumn: word.endColumn 
           };
 
+          // 1. デフォルトAPIとスニペット
           const suggestions = luaAutocompleteCandidates.map(item => {
             let kind = monaco.languages.CompletionItemKind.Keyword;
             if (item.kind === 'Function') kind = monaco.languages.CompletionItemKind.Function;
@@ -575,6 +626,34 @@
               range: range
             };
           });
+
+          // 2. 現在のエディタ内の「全ての変数」「関数」を動的に取得して追加！
+          const text = model.getValue();
+          
+          // 関数の抽出
+          const funcRegex = /(?:function|local\s+function)\s+([a-zA-Z_]\w*)/g;
+          let match;
+          while ((match = funcRegex.exec(text)) !== null) {
+            suggestions.push({
+              label: match[1],
+              kind: monaco.languages.CompletionItemKind.Function,
+              insertText: match[1] + "()",
+              detail: "作成済みファンクション",
+              range: range
+            });
+          }
+
+          // 変数の抽出
+          const varRegex = /local\s+([a-zA-Z_]\w*)\s*(?:=|,)/g;
+          while ((match = varRegex.exec(text)) !== null) {
+            suggestions.push({
+              label: match[1],
+              kind: monaco.languages.CompletionItemKind.Variable,
+              insertText: match[1],
+              detail: "作成済み変数",
+              range: range
+            });
+          }
 
           return { suggestions: suggestions };
         }
@@ -630,9 +709,7 @@
     });
 
     /* --- 機能各種 --- */
-    function toggleHelpModal(show) {
-      document.getElementById('help-modal').classList.toggle('active', show);
-    }
+    function toggleHelpModal(show) { document.getElementById('help-modal').classList.toggle('active', show); }
 
     function insertColorCode() {
       const color = document.getElementById('color-picker').value;
@@ -641,10 +718,7 @@
       editor.focus();
     }
 
-    function resetBackground() {
-      document.body.style.background = "radial-gradient(circle at top right, #1a1c29, var(--bg-dark))";
-    }
-
+    function resetBackground() { document.body.style.background = "radial-gradient(circle at top right, #1a1c29, var(--bg-dark))"; }
     function formatCode() { editor.getAction('editor.action.formatDocument').run(); }
 
     function clearConsole() { 
@@ -654,6 +728,7 @@
         const ctx = cvs.getContext('2d');
         ctx.clearRect(0, 0, cvs.width, cvs.height);
       }
+      managedRects = {}; // オブジェクトもクリア
     }
 
     function changeFontSize(delta) { 
@@ -720,6 +795,9 @@
       const code = editor.getValue(); 
       const consoleOut = document.getElementById('console-output'); 
       consoleOut.innerHTML = ''; 
+      
+      // ★実行のたびにオブジェクトをリセットする
+      managedRects = {};
 
       const startTime = performance.now();
 
@@ -733,7 +811,77 @@
           const L = fengari.lauxlib.luaL_newstate();
           fengari.lualib.luaL_openlibs(L);
 
-          // APIバインド: print(...)
+          /* ========================================================
+             新規追加：オブジェクト管理型 描画 API バインディング
+          ======================================================== */
+          
+          // create_rect(name, x, y, sizex, sizey, rotation, color)
+          fengari.lua.lua_pushjsfunction(L, function(L_ptr) {
+            const name = fengari.lua.lua_tojsstring(L_ptr, 1) || "rect";
+            const x = fengari.lua.lua_tonumber(L_ptr, 2) || 0;
+            const y = fengari.lua.lua_tonumber(L_ptr, 3) || 0;
+            const w = fengari.lua.lua_tonumber(L_ptr, 4) || 10;
+            const h = fengari.lua.lua_tonumber(L_ptr, 5) || 10;
+            const rot = fengari.lua.lua_tonumber(L_ptr, 6) || 0;
+            const color = fengari.lua.lua_tojsstring(L_ptr, 7) || "#ffffff";
+            managedRects[name] = { x: x, y: y, w: w, h: h, rot: rot, color: color };
+            return 0;
+          });
+          fengari.lua.lua_setglobal(L, fengari.to_luastring("create_rect"));
+
+          // moverect(rectname, x, y)
+          fengari.lua.lua_pushjsfunction(L, function(L_ptr) {
+            const name = fengari.lua.lua_tojsstring(L_ptr, 1) || "";
+            const x = fengari.lua.lua_tonumber(L_ptr, 2) || 0;
+            const y = fengari.lua.lua_tonumber(L_ptr, 3) || 0;
+            if (managedRects[name]) {
+              managedRects[name].x = x;
+              managedRects[name].y = y;
+            }
+            return 0;
+          });
+          fengari.lua.lua_setglobal(L, fengari.to_luastring("moverect"));
+
+          // sizingrect(rectname, sizex, sizey)
+          fengari.lua.lua_pushjsfunction(L, function(L_ptr) {
+            const name = fengari.lua.lua_tojsstring(L_ptr, 1) || "";
+            const w = fengari.lua.lua_tonumber(L_ptr, 2) || 10;
+            const h = fengari.lua.lua_tonumber(L_ptr, 3) || 10;
+            if (managedRects[name]) {
+              managedRects[name].w = w;
+              managedRects[name].h = h;
+            }
+            return 0;
+          });
+          fengari.lua.lua_setglobal(L, fengari.to_luastring("sizingrect"));
+
+          // rotationrect(rectname, rotation)
+          fengari.lua.lua_pushjsfunction(L, function(L_ptr) {
+            const name = fengari.lua.lua_tojsstring(L_ptr, 1) || "";
+            const rot = fengari.lua.lua_tonumber(L_ptr, 2) || 0;
+            if (managedRects[name]) {
+              managedRects[name].rot = rot;
+            }
+            return 0;
+          });
+          fengari.lua.lua_setglobal(L, fengari.to_luastring("rotationrect"));
+
+          // colorrect(rectname, color)
+          fengari.lua.lua_pushjsfunction(L, function(L_ptr) {
+            const name = fengari.lua.lua_tojsstring(L_ptr, 1) || "";
+            const color = fengari.lua.lua_tojsstring(L_ptr, 2) || "#ffffff";
+            if (managedRects[name]) {
+              managedRects[name].color = color;
+            }
+            return 0;
+          });
+          fengari.lua.lua_setglobal(L, fengari.to_luastring("colorrect"));
+
+          /* ========================================================
+             既存機能の API バインディング
+          ======================================================== */
+
+          // print(...)
           fengari.lua.lua_pushjsfunction(L, function(L_ptr) {
             const top = fengari.lua.lua_gettop(L_ptr);
             let strArr = [];
@@ -749,7 +897,7 @@
           });
           fengari.lua.lua_setglobal(L, fengari.to_luastring("print"));
 
-          // APIバインド: wait(sec)
+          // wait(sec)
           fengari.lua.lua_pushjsfunction(L, function(L_ptr) {
             const sec = fengari.lua.lua_tonumber(L_ptr, 1) || 0;
             fengari.lua.lua_pushnumber(L_ptr, sec);
@@ -757,7 +905,7 @@
           });
           fengari.lua.lua_setglobal(L, fengari.to_luastring("wait"));
 
-          // APIバインド: draw_rect(x, y, w, h, color)
+          // draw_rect(x, y, w, h, color)
           fengari.lua.lua_pushjsfunction(L, function(L_ptr) {
             const x = fengari.lua.lua_tonumber(L_ptr, 1) || 0;
             const y = fengari.lua.lua_tonumber(L_ptr, 2) || 0;
@@ -774,7 +922,7 @@
           });
           fengari.lua.lua_setglobal(L, fengari.to_luastring("draw_rect"));
 
-          // APIバインド: clear_canvas()
+          // clear_canvas()
           fengari.lua.lua_pushjsfunction(L, function(L_ptr) {
             const cvs = document.getElementById('screen-canvas');
             if (cvs) {
@@ -785,7 +933,7 @@
           });
           fengari.lua.lua_setglobal(L, fengari.to_luastring("clear_canvas"));
 
-          // APIバインド: play_sound(freq, duration)
+          // play_sound(freq, duration)
           fengari.lua.lua_pushjsfunction(L, function(L_ptr) {
             const freq = fengari.lua.lua_tonumber(L_ptr, 1) || 440;
             const duration = fengari.lua.lua_tonumber(L_ptr, 2) || 0.1;
@@ -805,7 +953,7 @@
           });
           fengari.lua.lua_setglobal(L, fengari.to_luastring("play_sound"));
 
-          // APIバインド: set_bg(color)
+          // set_bg(color)
           fengari.lua.lua_pushjsfunction(L, function(L_ptr) {
             const color = fengari.lua.lua_tojsstring(L_ptr, 1) || "#090a0f";
             document.body.style.background = color;
@@ -813,30 +961,20 @@
           });
           fengari.lua.lua_setglobal(L, fengari.to_luastring("set_bg"));
 
-          // APIバインド: reset_bg()
+          // reset_bg()
           fengari.lua.lua_pushjsfunction(L, function(L_ptr) {
             resetBackground();
             return 0;
           });
           fengari.lua.lua_setglobal(L, fengari.to_luastring("reset_bg"));
 
-          /* --- 入力検知用 API バインド --- */
-
-          // APIバインド: get_mouse_x()
-          fengari.lua.lua_pushjsfunction(L, function(L_ptr) {
-            fengari.lua.lua_pushnumber(L_ptr, inputMouseX);
-            return 1;
-          });
+          /* --- 入力検知用 API --- */
+          fengari.lua.lua_pushjsfunction(L, function(L_ptr) { fengari.lua.lua_pushnumber(L_ptr, inputMouseX); return 1; });
           fengari.lua.lua_setglobal(L, fengari.to_luastring("get_mouse_x"));
 
-          // APIバインド: get_mouse_y()
-          fengari.lua.lua_pushjsfunction(L, function(L_ptr) {
-            fengari.lua.lua_pushnumber(L_ptr, inputMouseY);
-            return 1;
-          });
+          fengari.lua.lua_pushjsfunction(L, function(L_ptr) { fengari.lua.lua_pushnumber(L_ptr, inputMouseY); return 1; });
           fengari.lua.lua_setglobal(L, fengari.to_luastring("get_mouse_y"));
 
-          // APIバインド: is_mouse_down(btn) (0:左, 1:中, 2:右)
           fengari.lua.lua_pushjsfunction(L, function(L_ptr) {
             const btn = fengari.lua.lua_isnoneornil(L_ptr, 1) ? 0 : (fengari.lua.lua_tonumber(L_ptr, 1) || 0);
             fengari.lua.lua_pushboolean(L_ptr, !!inputMouseButtons[btn]);
@@ -844,7 +982,6 @@
           });
           fengari.lua.lua_setglobal(L, fengari.to_luastring("is_mouse_down"));
 
-          // APIバインド: is_key_down(keyName)
           fengari.lua.lua_pushjsfunction(L, function(L_ptr) {
             const key = fengari.lua.lua_tojsstring(L_ptr, 1) || "";
             fengari.lua.lua_pushboolean(L_ptr, !!inputKeyState[key]);
@@ -852,7 +989,6 @@
           });
           fengari.lua.lua_setglobal(L, fengari.to_luastring("is_key_down"));
 
-          // APIバインド: get_last_key()
           fengari.lua.lua_pushjsfunction(L, function(L_ptr) {
             fengari.lua.lua_pushstring(L_ptr, fengari.to_luastring(inputLastKey || ""));
             return 1;
@@ -902,14 +1038,12 @@
 
     function handleError(errText, consoleOut) {
       let html = `<div class="error-card"><i class="fa-solid fa-triangle-exclamation"></i> <b>エラー発生:</b><br>${escapeHtml(errText)}</div>`;
-      
       let help = "コードを確認してください。";
       if (errText.includes("syntax error") || errText.includes("unexpected symbol")) {
         help = "<code>then</code> や <code>end</code> などのキーワード忘れや記号の綴りミスを確認してください。";
       } else if (errText.includes("attempt to call a nil value")) {
         help = "存在しない関数を呼び出そうとしています。スペルミスが無いか確認してください。";
       }
-      
       html += `<div class="ai-assist-card"><div class="title"><i class="fa-solid fa-lightbulb"></i> ヒント</div>${help}</div>`;
       consoleOut.innerHTML = html;
     }
