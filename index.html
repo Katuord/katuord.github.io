@@ -455,9 +455,9 @@
       ]
     };
 
-    // Monaco エディタ用の拡張予測変換（キーワー・スニペット・組み込み API）
+    // Monaco エディタ用の拡張予測変換（キーワード・スニペット・組み込み API）
     const luaAutocompleteCandidates = [
-      // Lua 予約語 / キーワード
+      // Lua 予約語 / キーキーワード
       { label: 'local', kind: 'Keyword', insertText: 'local ${1:name} = ${2:value}', isSnippet: true, detail: 'ローカル変数を宣言' },
       { label: 'function', kind: 'Keyword', insertText: 'function ${1:name}(${2:params})\n\t${3}\nend', isSnippet: true, detail: '関数を定義' },
       { label: 'local function', kind: 'Keyword', insertText: 'local function ${1:name}(${2:params})\n\t${3}\nend', isSnippet: true, detail: 'ローカル関数を定義' },
@@ -515,6 +515,39 @@
         inherit: true, 
         rules: [{ background: '090a0f' }], 
         colors: { 'editor.background': '#090a0f00' } 
+      });
+
+      // Luaの言語設定（手入力での改行時に自動でインデントおよび end を自動挿入）
+      monaco.languages.setLanguageConfiguration('lua', {
+        indentationRules: {
+          increaseIndentPattern: /^\s*(?:function|local\s+function|if|then|elseif|else|for|while|do|repeat)\b.*$/,
+          decreaseIndentPattern: /^\s*(?:end|until|elseif|else)\b.*$/
+        },
+        onEnterRules: [
+          {
+            // function, if ... then, for ... do, while ... do, do 等の行で改行した際にインデントを入れ下行に end を配置
+            beforeText: /^\s*(?:function\b.*|local\s+function\b.*|if\b.*then|for\b.*do|while\b.*do|do)\s*$/,
+            action: {
+              indentAction: monaco.languages.IndentAction.IndentOutdent,
+              appendText: '\nend'
+            }
+          },
+          {
+            // repeat の行で改行した際に until を配置
+            beforeText: /^\s*repeat\s*$/,
+            action: {
+              indentAction: monaco.languages.IndentAction.IndentOutdent,
+              appendText: '\nuntil '
+            }
+          },
+          {
+            // else / elseif 等でのインデント補助
+            beforeText: /^\s*(?:else|elseif\b.*)\s*$/,
+            action: {
+              indentAction: monaco.languages.IndentAction.Indent
+            }
+          }
+        ]
       });
 
       // 予測変換 (補完プロバイダ) の強化登録
